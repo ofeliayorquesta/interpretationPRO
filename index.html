@@ -52,8 +52,8 @@
                     </button>
                     
                     <p class="text-[10px] text-slate-400 text-center leading-relaxed">
-                        <b>Active Model:</b> Gemini 3 Flash<br>
-                        Polling every 5 seconds for transcription.
+                        <b>Dual Capture:</b> Mic + Tab Audio.<br>
+                        <b>Auto-Retry:</b> Backoff enabled for free tier.
                     </p>
 
                     <!-- Mixer Monitor -->
@@ -89,7 +89,7 @@
             <div class="bg-slate-900 p-5 rounded-3xl flex-1 flex flex-col min-h-[150px] shadow-xl overflow-hidden border border-slate-800">
                 <h2 class="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2">Internal Logs</h2>
                 <div id="debug-logs" class="flex-1 font-mono text-[10px] text-indigo-300/80 overflow-y-auto leading-relaxed space-y-1">
-                    <div class="text-slate-500 italic">> Model: gemini-3-flash-preview</div>
+                    <div class="text-slate-500 italic">> Model: gemini-2.5-flash</div>
                 </div>
             </div>
         </aside>
@@ -100,14 +100,14 @@
                 <div id="empty-state" class="h-full flex flex-col items-center justify-center text-slate-300 px-10 text-center">
                     <p class="text-slate-800 font-black text-xl mb-2 tracking-tight">System Ready</p>
                     <p class="text-sm text-slate-400 max-w-xs leading-relaxed font-medium tracking-tight">
-                        Both your microphone and the portal audio will be transcribed here.
+                        Combined transcription of your mic and the portal audio will appear here.
                     </p>
                 </div>
             </div>
 
             <!-- Signal Meter -->
             <div class="px-6 py-4 border-t border-slate-100 flex items-center gap-4 bg-white">
-                <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest shrink-0">Processing Pulse</span>
+                <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest shrink-0">Processing</span>
                 <div class="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden relative">
                     <div id="visualizer-bar" class="h-full bg-indigo-500 w-0 transition-all duration-300 rounded-full shadow-[0_0_10px_rgba(79,70,229,0.5)]"></div>
                 </div>
@@ -145,12 +145,12 @@
             let role = 'interpreted';
             let content = text;
 
-            if (text.toLowerCase().startsWith('agent:')) {
+            if (text.toLowerCase().includes('agent:')) {
                 role = 'Agent (You)';
-                content = text.substring(6).trim();
-            } else if (text.toLowerCase().startsWith('client:')) {
+                content = text.split(/agent:/i)[1].trim();
+            } else if (text.toLowerCase().includes('client:')) {
                 role = 'Client (Portal)';
-                content = text.substring(7).trim();
+                content = text.split(/client:/i)[1].trim();
             }
             
             const isClient = role.includes('Client');
@@ -188,27 +188,51 @@
             if (isRecording) requestAnimationFrame(updateMicVisuals);
         }
 
+        async function fetchWithRetry(url, payload, retries = 5, delay = 1000) {
+            for (let i = 0; i < retries; i++) {
+                try {
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        body: JSON.stringify(payload),
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.error) {
+                        if (data.error.message.includes('Quota exceeded') || response.status === 429) {
+                            log(`Quota hit. Retrying in ${delay/1000}s...`);
+                            await new Promise(r => setTimeout(r, delay));
+                            delay *= 2; // Exponential backoff
+                            continue;
+                        }
+                        throw new Error(data.error.message);
+                    }
+                    return data;
+                } catch (err) {
+                    if (i === retries - 1) throw err;
+                    await new Promise(r => setTimeout(r, delay));
+                    delay *= 2;
+                }
+            }
+        }
+
         async function interpretAudio(base64Audio, apiKey) {
             const targetLang = document.getElementById('target-lang').value;
-            // Updated model ID for 2026 compatibility
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
             
             const payload = {
                 contents: [{
                     parts: [
-                        { text: `The audio provided is a mix of two people. 
-                        Agent: The person speaking into the local microphone.
-                        Client: The person speaking through the browser tab/portal.
-                        
-                        YOUR JOB: 
-                        1. Transcribe the Agent's speech exactly.
-                        2. Transcribe and translate the Client's speech into ${targetLang}.
+                        { text: `Audio contains two sides of a call. 
+                        Agent: Microphone user. 
+                        Client: Browser portal caller (translate to ${targetLang}).
                         
                         OUTPUT FORMAT:
-                        Agent: [transcript]
-                        Client: [translation]
+                        Agent: [Transcript]
+                        Client: [Translation]
                         
-                        Return ONLY the labels and text. Do not provide meta-commentary.` },
+                        Only output labels and text. If silence, return nothing.` },
                         { inlineData: { mimeType: "audio/webm", data: base64Audio } }
                     ]
                 }]
@@ -217,38 +241,24 @@
             visualizer.style.width = "100%";
             
             try {
-                const response = await fetch(url, {
-                    method: 'POST',
-                    body: JSON.stringify(payload),
-                    headers: { 'Content-Type': 'application/json' }
-                });
-                
-                const data = await response.json();
-                
-                if (data.error) {
-                    log("API Error: " + data.error.message, "error");
-                    return;
-                }
-
+                const data = await fetchWithRetry(url, payload);
                 const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
                 
                 if (text && text.trim().length > 3) {
                     text.split('\n').forEach(line => {
                         if (line.trim().length > 3) appendMessage(line.trim());
                     });
-                    log("Transcription Received.");
-                } else {
-                    log("Listening...");
+                    log("Content Received.", "success");
                 }
             } catch (err) {
-                log("Network Error: " + err.message, "error");
+                log("API Error: " + err.message, "error");
             } finally {
                 setTimeout(() => visualizer.style.width = "0%", 300);
             }
         }
 
         async function startSession(stream, apiKey) {
-            log("Initializing Audio Pipeline...");
+            log("Initializing Audio Mixer...");
             
             if (audioContext) audioContext.close();
             audioContext = new AudioContext();
@@ -276,7 +286,7 @@
                 };
 
                 mediaRecorder.start();
-                log("Processing Active.", "success");
+                log("Stream Active.", "success");
 
                 setInterval(() => {
                     if (mediaRecorder.state === "recording") {
@@ -289,28 +299,29 @@
                 statusText.innerText = 'Connected';
 
             } catch (err) {
-                log("Recorder Error: " + err.message, "error");
+                log("Media Error: " + err.message, "error");
             }
         }
 
         startBtn.addEventListener('click', async () => {
             const apiKey = document.getElementById('api-key').value;
-            if (!apiKey) { alert("Please enter your Gemini API Key."); return; }
+            if (!apiKey) { alert("Enter API Key."); return; }
             if (isRecording) { location.reload(); return; }
 
             try {
-                log("Requesting Dual Audio Access...");
+                log("Requesting System Audio...");
                 const tabStream = await navigator.mediaDevices.getDisplayMedia({
                     video: true,
-                    audio: { echoCancellation: false, noiseSuppression: false }
+                    audio: { echoCancellation: false }
                 });
 
                 if (tabStream.getAudioTracks().length === 0) {
-                    alert("No tab audio shared. Ensure you check 'Share tab audio'.");
+                    alert("Must check 'Share tab audio'!");
                     tabStream.getTracks().forEach(t => t.stop());
                     return;
                 }
 
+                log("Requesting Mic Access...");
                 const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
                 const audioCtx = new AudioContext();
@@ -324,7 +335,7 @@
                 
                 await startSession(dest.stream, apiKey);
             } catch (err) {
-                log("Capture Denied: " + err.message, "error");
+                log("Permission Denied.", "error");
             }
         });
     </script>
