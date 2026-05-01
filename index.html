@@ -25,7 +25,7 @@
             </div>
             <div class="flex flex-col">
                 <h1 class="text-lg font-bold tracking-tight leading-none">Interpretation <span class="text-indigo-600 font-black">PRO</span></h1>
-                <span class="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-1">Dual-Channel Monitor</span>
+                <span class="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-1">Dual-Channel Stream</span>
             </div>
         </div>
         <div class="flex items-center gap-4">
@@ -39,20 +39,20 @@
 
     <!-- Main Workspace -->
     <main class="flex-1 overflow-hidden flex flex-col md:flex-row p-4 gap-4">
-
+        
         <!-- Sidebar -->
         <aside class="w-full md:w-80 flex flex-col gap-4 shrink-0 overflow-y-auto pr-1">
             <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
                 <h2 class="text-[11px] font-black text-slate-400 uppercase mb-4 tracking-widest">Interpretation Hub</h2>
-
+                
                 <div class="space-y-3">
                     <button id="start-btn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 px-4 rounded-2xl transition-all shadow-md active:scale-[0.98] flex items-center justify-center gap-3">
                         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
-                        Connect Stream
+                        Connect Call
                     </button>
-
+                    
                     <p class="text-[10px] text-slate-400 text-center leading-relaxed">
-                        Capturing <b>Propio Tab Audio</b> + <b>Microphone</b>.<br>
+                        <b>Active Model:</b> Gemini 3 Flash<br>
                         Polling every 5 seconds for transcription.
                     </p>
 
@@ -89,7 +89,7 @@
             <div class="bg-slate-900 p-5 rounded-3xl flex-1 flex flex-col min-h-[150px] shadow-xl overflow-hidden border border-slate-800">
                 <h2 class="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2">Internal Logs</h2>
                 <div id="debug-logs" class="flex-1 font-mono text-[10px] text-indigo-300/80 overflow-y-auto leading-relaxed space-y-1">
-                    <div class="text-slate-500 italic">> Model set: gemini-2.5-flash-preview-09-2025</div>
+                    <div class="text-slate-500 italic">> Model: gemini-3-flash-preview</div>
                 </div>
             </div>
         </aside>
@@ -98,16 +98,16 @@
         <section class="flex-1 bg-white rounded-3xl shadow-sm border border-slate-200 flex flex-col overflow-hidden relative">
             <div id="chat-feed" class="chat-container flex-1 overflow-y-auto p-8 space-y-6 bg-slate-50/10">
                 <div id="empty-state" class="h-full flex flex-col items-center justify-center text-slate-300 px-10 text-center">
-                    <p class="text-slate-800 font-black text-xl mb-2 tracking-tight">Listening for Stream</p>
+                    <p class="text-slate-800 font-black text-xl mb-2 tracking-tight">System Ready</p>
                     <p class="text-sm text-slate-400 max-w-xs leading-relaxed font-medium tracking-tight">
-                        Dual transcription of your mic and the portal audio will appear here.
+                        Both your microphone and the portal audio will be transcribed here.
                     </p>
                 </div>
             </div>
 
             <!-- Signal Meter -->
             <div class="px-6 py-4 border-t border-slate-100 flex items-center gap-4 bg-white">
-                <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest shrink-0">Processing</span>
+                <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest shrink-0">Processing Pulse</span>
                 <div class="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden relative">
                     <div id="visualizer-bar" class="h-full bg-indigo-500 w-0 transition-all duration-300 rounded-full shadow-[0_0_10px_rgba(79,70,229,0.5)]"></div>
                 </div>
@@ -120,7 +120,7 @@
         let audioContext;
         let analyser;
         let isRecording = false;
-
+        
         const startBtn = document.getElementById('start-btn');
         const chatFeed = document.getElementById('chat-feed');
         const statusDot = document.getElementById('status-dot');
@@ -141,8 +141,7 @@
         function appendMessage(text) {
             const emptyState = document.getElementById('empty-state');
             if (emptyState) emptyState.remove();
-
-            // Expected format: "Agent: text" or "Client: text"
+            
             let role = 'interpreted';
             let content = text;
 
@@ -153,13 +152,13 @@
                 role = 'Client (Portal)';
                 content = text.substring(7).trim();
             }
-
-            const isInterpreter = role.includes('Client');
+            
+            const isClient = role.includes('Client');
             const div = document.createElement('div');
-            div.className = `flex ${isInterpreter ? 'justify-start' : 'justify-end'}`;
-
+            div.className = `flex ${isClient ? 'justify-start' : 'justify-end'}`;
+            
             div.innerHTML = `
-                <div class="chat-bubble p-5 rounded-[1.5rem] text-sm leading-relaxed ${isInterpreter ? 'bg-white border border-slate-200 text-slate-800 shadow-sm' : 'bg-indigo-600 text-white shadow-md'}">
+                <div class="chat-bubble p-5 rounded-[1.5rem] text-sm leading-relaxed ${isClient ? 'bg-white border border-slate-200 text-slate-800 shadow-sm' : 'bg-indigo-600 text-white shadow-md'}">
                     <div class="text-[9px] uppercase font-black opacity-30 mb-2 tracking-[0.2em]">${role}</div>
                     <div class="font-medium tracking-tight">${content}</div>
                 </div>
@@ -172,14 +171,14 @@
             if (!analyser) return;
             const dataArray = new Uint8Array(analyser.frequencyBinCount);
             analyser.getByteFrequencyData(dataArray);
-
+            
             let sum = 0;
             for(let i=0; i<dataArray.length; i++) sum += dataArray[i];
             const avg = sum / dataArray.length;
             const percent = Math.min(100, Math.round((avg / 64) * 100));
-
+            
             levelVal.innerText = `${percent}%`;
-
+            
             waveBars.forEach((bar, index) => {
                 const val = dataArray[index * 4] || 0;
                 bar.style.height = `${Math.max(4, (val / 255) * 40)}px`;
@@ -191,55 +190,55 @@
 
         async function interpretAudio(base64Audio, apiKey) {
             const targetLang = document.getElementById('target-lang').value;
-            // Updated to the current stable endpoint
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
-
+            // Updated model ID for 2026 compatibility
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+            
             const payload = {
                 contents: [{
                     parts: [
-                        { text: `The provided audio is a mix of a professional interpreter (Agent) and a caller (Client).
-
-                        YOUR TASK:
-                        1. Transcribe the "Agent" (microphone audio) exactly as spoken.
-                        2. Transcribe the "Client" (portal/tab audio) and interpret it into ${targetLang}.
-
+                        { text: `The audio provided is a mix of two people. 
+                        Agent: The person speaking into the local microphone.
+                        Client: The person speaking through the browser tab/portal.
+                        
+                        YOUR JOB: 
+                        1. Transcribe the Agent's speech exactly.
+                        2. Transcribe and translate the Client's speech into ${targetLang}.
+                        
                         OUTPUT FORMAT:
                         Agent: [transcript]
-                        Client: [translated text]
-
-                        Return ONLY the labels and text. If there is no clear speech, return nothing.` },
+                        Client: [translation]
+                        
+                        Return ONLY the labels and text. Do not provide meta-commentary.` },
                         { inlineData: { mimeType: "audio/webm", data: base64Audio } }
                     ]
                 }]
             };
 
             visualizer.style.width = "100%";
-            log("Sending chunk to Gemini...");
-
+            
             try {
                 const response = await fetch(url, {
                     method: 'POST',
                     body: JSON.stringify(payload),
                     headers: { 'Content-Type': 'application/json' }
                 });
-
+                
                 const data = await response.json();
-
+                
                 if (data.error) {
                     log("API Error: " + data.error.message, "error");
                     return;
                 }
 
                 const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-
+                
                 if (text && text.trim().length > 3) {
-                    const lines = text.split('\n');
-                    lines.forEach(line => {
-                        if (line.trim().length > 2) appendMessage(line.trim());
+                    text.split('\n').forEach(line => {
+                        if (line.trim().length > 3) appendMessage(line.trim());
                     });
-                    log("Transcription received.", "success");
+                    log("Transcription Received.");
                 } else {
-                    log("Processed (Silence detected).");
+                    log("Listening...");
                 }
             } catch (err) {
                 log("Network Error: " + err.message, "error");
@@ -249,8 +248,8 @@
         }
 
         async function startSession(stream, apiKey) {
-            log("Configuring Audio Pipeline...");
-
+            log("Initializing Audio Pipeline...");
+            
             if (audioContext) audioContext.close();
             audioContext = new AudioContext();
             const source = audioContext.createMediaStreamSource(stream);
@@ -277,20 +276,20 @@
                 };
 
                 mediaRecorder.start();
-                log("Capture Active.", "success");
+                log("Processing Active.", "success");
 
                 setInterval(() => {
                     if (mediaRecorder.state === "recording") {
                         mediaRecorder.stop();
                         mediaRecorder.start();
                     }
-                }, 5000); // 5-second pulses
+                }, 5000);
 
                 statusDot.className = 'w-2 h-2 bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)] status-pulse';
-                statusText.innerText = 'Listening';
+                statusText.innerText = 'Connected';
 
             } catch (err) {
-                log("MediaRecorder Error: " + err.message, "error");
+                log("Recorder Error: " + err.message, "error");
             }
         }
 
@@ -300,33 +299,32 @@
             if (isRecording) { location.reload(); return; }
 
             try {
-                log("Requesting Tab Audio...");
+                log("Requesting Dual Audio Access...");
                 const tabStream = await navigator.mediaDevices.getDisplayMedia({
                     video: true,
                     audio: { echoCancellation: false, noiseSuppression: false }
                 });
 
                 if (tabStream.getAudioTracks().length === 0) {
-                    alert("ERROR: No tab audio shared. Ensure 'Share tab audio' is checked.");
+                    alert("No tab audio shared. Ensure you check 'Share tab audio'.");
                     tabStream.getTracks().forEach(t => t.stop());
                     return;
                 }
 
-                log("Requesting Microphone...");
                 const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
                 const audioCtx = new AudioContext();
                 const dest = audioCtx.createMediaStreamDestination();
-
+                
                 audioCtx.createMediaStreamSource(tabStream).connect(dest);
                 audioCtx.createMediaStreamSource(micStream).connect(dest);
-
-                startBtn.innerText = "Stop Session";
+                
+                startBtn.innerText = "Active";
                 startBtn.classList.replace('bg-indigo-600', 'bg-red-500');
-
+                
                 await startSession(dest.stream, apiKey);
             } catch (err) {
-                log("Capture Error: " + err.message, "error");
+                log("Capture Denied: " + err.message, "error");
             }
         });
     </script>
