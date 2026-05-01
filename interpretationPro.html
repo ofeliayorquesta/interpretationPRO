@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemini Interpretation Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .chat-container::-webkit-scrollbar { width: 6px; }
+        .chat-container::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .chat-bubble { max-width: 85%; animation: fadeIn 0.3s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .wave-bar { transition: height 0.1s ease; min-height: 2px; }
+        .status-pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
+    </style>
+</head>
+<body class="bg-slate-50 font-sans h-screen flex flex-col overflow-hidden text-slate-900">
+
+    <!-- Header -->
+    <header class="bg-white border-b px-6 py-4 flex justify-between items-center shadow-sm z-10">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-indigo-200 shadow-lg shrink-0">
+                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+            </div>
+            <div class="flex flex-col">
+                <h1 class="text-lg font-bold tracking-tight leading-none">Interpretation <span class="text-indigo-600 font-black">PRO</span></h1>
+                <span class="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-1">Dual-Channel Monitor</span>
+            </div>
+        </div>
+        <div class="flex items-center gap-4">
+            <div id="status-group" class="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-full border border-slate-200">
+                <div id="status-dot" class="w-2 h-2 bg-slate-400 rounded-full"></div>
+                <span id="status-text" class="text-[10px] font-black text-slate-500 uppercase tracking-widest leading-none">Standby</span>
+            </div>
+            <input type="password" id="api-key" placeholder="Gemini API Key" class="text-sm px-4 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none w-48 shadow-inner bg-slate-50 transition-all font-mono">
+        </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <main class="flex-1 overflow-hidden flex flex-col md:flex-row p-4 gap-4">
+
+        <!-- Sidebar -->
+        <aside class="w-full md:w-80 flex flex-col gap-4 shrink-0 overflow-y-auto pr-1">
+            <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
+                <h2 class="text-[11px] font-black text-slate-400 uppercase mb-4 tracking-widest">Interpretation Hub</h2>
+
+                <div class="space-y-3">
+                    <button id="start-btn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 px-4 rounded-2xl transition-all shadow-md active:scale-[0.98] flex items-center justify-center gap-3">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+                        Connect Stream
+                    </button>
+
+                    <p class="text-[10px] text-slate-400 text-center leading-relaxed">
+                        Capturing <b>Propio Tab Audio</b> + <b>Microphone</b>.<br>
+                        Polling every 5 seconds for transcription.
+                    </p>
+
+                    <!-- Mixer Monitor -->
+                    <div class="bg-slate-50 rounded-2xl p-4 border border-slate-100 mt-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Mixed Signal</span>
+                            <span id="level-val" class="text-[10px] font-mono text-indigo-500 font-bold">0%</span>
+                        </div>
+                        <div class="flex items-end justify-center gap-1.5 h-10" id="wave-container">
+                            <div class="w-1.5 bg-slate-200 rounded-full h-1 wave-bar"></div>
+                            <div class="w-1.5 bg-slate-200 rounded-full h-1 wave-bar"></div>
+                            <div class="w-1.5 bg-slate-200 rounded-full h-1 wave-bar"></div>
+                            <div class="w-1.5 bg-slate-200 rounded-full h-1 wave-bar"></div>
+                            <div class="w-1.5 bg-slate-200 rounded-full h-1 wave-bar"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
+                <h2 class="text-[10px] font-black text-slate-800 uppercase mb-3 tracking-widest">Configuration</h2>
+                <label class="text-[10px] text-slate-400 font-bold mb-1.5 block uppercase">Interpret Client to:</label>
+                <select id="target-lang" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none text-sm font-bold focus:ring-2 focus:ring-indigo-500 transition-all appearance-none">
+                    <option value="English">English</option>
+                    <option value="Spanish">Spanish</option>
+                    <option value="French">French</option>
+                    <option value="Portuguese">Portuguese</option>
+                    <option value="Arabic">Arabic</option>
+                    <option value="Japanese">Japanese</option>
+                </select>
+            </div>
+
+            <div class="bg-slate-900 p-5 rounded-3xl flex-1 flex flex-col min-h-[150px] shadow-xl overflow-hidden border border-slate-800">
+                <h2 class="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2">Internal Logs</h2>
+                <div id="debug-logs" class="flex-1 font-mono text-[10px] text-indigo-300/80 overflow-y-auto leading-relaxed space-y-1">
+                    <div class="text-slate-500 italic">> Model set: gemini-2.5-flash-preview-09-2025</div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Chat Feed -->
+        <section class="flex-1 bg-white rounded-3xl shadow-sm border border-slate-200 flex flex-col overflow-hidden relative">
+            <div id="chat-feed" class="chat-container flex-1 overflow-y-auto p-8 space-y-6 bg-slate-50/10">
+                <div id="empty-state" class="h-full flex flex-col items-center justify-center text-slate-300 px-10 text-center">
+                    <p class="text-slate-800 font-black text-xl mb-2 tracking-tight">Listening for Stream</p>
+                    <p class="text-sm text-slate-400 max-w-xs leading-relaxed font-medium tracking-tight">
+                        Dual transcription of your mic and the portal audio will appear here.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Signal Meter -->
+            <div class="px-6 py-4 border-t border-slate-100 flex items-center gap-4 bg-white">
+                <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest shrink-0">Processing</span>
+                <div class="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden relative">
+                    <div id="visualizer-bar" class="h-full bg-indigo-500 w-0 transition-all duration-300 rounded-full shadow-[0_0_10px_rgba(79,70,229,0.5)]"></div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        let mediaRecorder;
+        let audioContext;
+        let analyser;
+        let isRecording = false;
+
+        const startBtn = document.getElementById('start-btn');
+        const chatFeed = document.getElementById('chat-feed');
+        const statusDot = document.getElementById('status-dot');
+        const statusText = document.getElementById('status-text');
+        const visualizer = document.getElementById('visualizer-bar');
+        const debugLogs = document.getElementById('debug-logs');
+        const levelVal = document.getElementById('level-val');
+        const waveBars = document.querySelectorAll('.wave-bar');
+
+        function log(msg, type = 'info') {
+            const div = document.createElement('div');
+            div.className = type === 'error' ? 'text-red-400' : (type === 'success' ? 'text-green-400' : 'text-indigo-300/80');
+            div.innerText = `> ${msg}`;
+            debugLogs.appendChild(div);
+            debugLogs.scrollTop = debugLogs.scrollHeight;
+        }
+
+        function appendMessage(text) {
+            const emptyState = document.getElementById('empty-state');
+            if (emptyState) emptyState.remove();
+
+            // Expected format: "Agent: text" or "Client: text"
+            let role = 'interpreted';
+            let content = text;
+
+            if (text.toLowerCase().startsWith('agent:')) {
+                role = 'Agent (You)';
+                content = text.substring(6).trim();
+            } else if (text.toLowerCase().startsWith('client:')) {
+                role = 'Client (Portal)';
+                content = text.substring(7).trim();
+            }
+
+            const isInterpreter = role.includes('Client');
+            const div = document.createElement('div');
+            div.className = `flex ${isInterpreter ? 'justify-start' : 'justify-end'}`;
+
+            div.innerHTML = `
+                <div class="chat-bubble p-5 rounded-[1.5rem] text-sm leading-relaxed ${isInterpreter ? 'bg-white border border-slate-200 text-slate-800 shadow-sm' : 'bg-indigo-600 text-white shadow-md'}">
+                    <div class="text-[9px] uppercase font-black opacity-30 mb-2 tracking-[0.2em]">${role}</div>
+                    <div class="font-medium tracking-tight">${content}</div>
+                </div>
+            `;
+            chatFeed.appendChild(div);
+            chatFeed.scrollTo({ top: chatFeed.scrollHeight, behavior: 'smooth' });
+        }
+
+        function updateMicVisuals() {
+            if (!analyser) return;
+            const dataArray = new Uint8Array(analyser.frequencyBinCount);
+            analyser.getByteFrequencyData(dataArray);
+
+            let sum = 0;
+            for(let i=0; i<dataArray.length; i++) sum += dataArray[i];
+            const avg = sum / dataArray.length;
+            const percent = Math.min(100, Math.round((avg / 64) * 100));
+
+            levelVal.innerText = `${percent}%`;
+
+            waveBars.forEach((bar, index) => {
+                const val = dataArray[index * 4] || 0;
+                bar.style.height = `${Math.max(4, (val / 255) * 40)}px`;
+                bar.style.backgroundColor = val > 15 ? '#6366f1' : '#e2e8f0';
+            });
+
+            if (isRecording) requestAnimationFrame(updateMicVisuals);
+        }
+
+        async function interpretAudio(base64Audio, apiKey) {
+            const targetLang = document.getElementById('target-lang').value;
+            // Updated to the current stable endpoint
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+
+            const payload = {
+                contents: [{
+                    parts: [
+                        { text: `The provided audio is a mix of a professional interpreter (Agent) and a caller (Client).
+
+                        YOUR TASK:
+                        1. Transcribe the "Agent" (microphone audio) exactly as spoken.
+                        2. Transcribe the "Client" (portal/tab audio) and interpret it into ${targetLang}.
+
+                        OUTPUT FORMAT:
+                        Agent: [transcript]
+                        Client: [translated text]
+
+                        Return ONLY the labels and text. If there is no clear speech, return nothing.` },
+                        { inlineData: { mimeType: "audio/webm", data: base64Audio } }
+                    ]
+                }]
+            };
+
+            visualizer.style.width = "100%";
+            log("Sending chunk to Gemini...");
+
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    body: JSON.stringify(payload),
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+                const data = await response.json();
+
+                if (data.error) {
+                    log("API Error: " + data.error.message, "error");
+                    return;
+                }
+
+                const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+                if (text && text.trim().length > 3) {
+                    const lines = text.split('\n');
+                    lines.forEach(line => {
+                        if (line.trim().length > 2) appendMessage(line.trim());
+                    });
+                    log("Transcription received.", "success");
+                } else {
+                    log("Processed (Silence detected).");
+                }
+            } catch (err) {
+                log("Network Error: " + err.message, "error");
+            } finally {
+                setTimeout(() => visualizer.style.width = "0%", 300);
+            }
+        }
+
+        async function startSession(stream, apiKey) {
+            log("Configuring Audio Pipeline...");
+
+            if (audioContext) audioContext.close();
+            audioContext = new AudioContext();
+            const source = audioContext.createMediaStreamSource(stream);
+            analyser = audioContext.createAnalyser();
+            analyser.fftSize = 64;
+            source.connect(analyser);
+
+            await new Promise(r => setTimeout(r, 1000));
+
+            try {
+                mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+                isRecording = true;
+                updateMicVisuals();
+
+                mediaRecorder.ondataavailable = async (e) => {
+                    if (e.data.size > 2000) {
+                        const reader = new FileReader();
+                        reader.readAsDataURL(e.data);
+                        reader.onloadend = () => {
+                            const base64 = reader.result.split(',')[1];
+                            interpretAudio(base64, apiKey);
+                        };
+                    }
+                };
+
+                mediaRecorder.start();
+                log("Capture Active.", "success");
+
+                setInterval(() => {
+                    if (mediaRecorder.state === "recording") {
+                        mediaRecorder.stop();
+                        mediaRecorder.start();
+                    }
+                }, 5000); // 5-second pulses
+
+                statusDot.className = 'w-2 h-2 bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)] status-pulse';
+                statusText.innerText = 'Listening';
+
+            } catch (err) {
+                log("MediaRecorder Error: " + err.message, "error");
+            }
+        }
+
+        startBtn.addEventListener('click', async () => {
+            const apiKey = document.getElementById('api-key').value;
+            if (!apiKey) { alert("Please enter your Gemini API Key."); return; }
+            if (isRecording) { location.reload(); return; }
+
+            try {
+                log("Requesting Tab Audio...");
+                const tabStream = await navigator.mediaDevices.getDisplayMedia({
+                    video: true,
+                    audio: { echoCancellation: false, noiseSuppression: false }
+                });
+
+                if (tabStream.getAudioTracks().length === 0) {
+                    alert("ERROR: No tab audio shared. Ensure 'Share tab audio' is checked.");
+                    tabStream.getTracks().forEach(t => t.stop());
+                    return;
+                }
+
+                log("Requesting Microphone...");
+                const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+                const audioCtx = new AudioContext();
+                const dest = audioCtx.createMediaStreamDestination();
+
+                audioCtx.createMediaStreamSource(tabStream).connect(dest);
+                audioCtx.createMediaStreamSource(micStream).connect(dest);
+
+                startBtn.innerText = "Stop Session";
+                startBtn.classList.replace('bg-indigo-600', 'bg-red-500');
+
+                await startSession(dest.stream, apiKey);
+            } catch (err) {
+                log("Capture Error: " + err.message, "error");
+            }
+        });
+    </script>
+</body>
+</html>
