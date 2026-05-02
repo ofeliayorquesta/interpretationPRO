@@ -21,8 +21,8 @@
                 <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
             </div>
             <div class="flex flex-col">
-                <h1 class="text-lg font-bold tracking-tight leading-none">Interpretation <span class="text-indigo-600">PRO</span></h1>
-                <span class="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-1">Context-Aware Engine</span>
+                <h1 class="text-lg font-bold tracking-tight leading-none">Interpretation <span class="text-indigo-600 font-black">PRO</span></h1>
+                <span class="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-1">Stable Poll Mode</span>
             </div>
         </div>
         <div class="flex items-center gap-4">
@@ -42,7 +42,7 @@
                     Connect Call Audio
                 </button>
                 <div class="mt-4 p-3 bg-indigo-50 rounded-xl border border-indigo-100 text-[10px] text-indigo-700 leading-tight">
-                    <b>Tip:</b> This version uses 8-second audio chunks to respect Free Tier quota limits.
+                    <b>Optimization:</b> 12s polling interval set to prevent Quota issues on Free Tier.
                 </div>
             </div>
 
@@ -67,15 +67,15 @@
         <section class="flex-1 bg-white rounded-3xl shadow-sm border border-slate-200 flex flex-col overflow-hidden relative">
             <div id="chat-feed" class="chat-container flex-1 overflow-y-auto p-8 space-y-6 bg-slate-50/10">
                 <div id="empty-state" class="h-full flex flex-col items-center justify-center text-slate-300 px-10 text-center">
-                    <p class="text-slate-800 font-black text-xl mb-2">Awaiting Stream</p>
-                    <p class="text-sm text-slate-400">Contextual memory is enabled to improve transcription accuracy.</p>
+                    <p class="text-slate-800 font-black text-xl mb-2 tracking-tight">System Ready</p>
+                    <p class="text-sm text-slate-400 leading-relaxed max-w-xs">Connecting audio will start the interpretation pulses. 12-second delay is normal for free tier.</p>
                 </div>
             </div>
 
             <div class="px-6 py-4 border-t border-slate-100 flex items-center gap-4 bg-white">
                 <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest shrink-0">Signal</span>
                 <div class="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden relative">
-                    <div id="visualizer-bar" class="h-full bg-indigo-500 w-0 transition-all duration-300 rounded-full"></div>
+                    <div id="visualizer-bar" class="h-full bg-indigo-500 w-0 transition-all duration-300 rounded-full shadow-[0_0_8px_rgba(99,102,241,0.4)]"></div>
                 </div>
             </div>
         </section>
@@ -86,7 +86,7 @@
         let audioContext;
         let analyser;
         let isRecording = false;
-        let contextHistory = []; // Track recent transcriptions to anchor Gemini
+        let contextHistory = [];
         
         const startBtn = document.getElementById('start-btn');
         const chatFeed = document.getElementById('chat-feed');
@@ -107,22 +107,22 @@
             const emptyState = document.getElementById('empty-state');
             if (emptyState) emptyState.remove();
             
-            let role = 'interpreted';
+            let role = 'Client';
             let content = text;
 
             if (text.toLowerCase().includes('agent:')) {
                 role = 'Agent (You)';
-                content = text.split(/agent:/i)[1].trim();
+                content = text.split(/agent:/i)[1]?.trim() || text;
             } else if (text.toLowerCase().includes('client:')) {
                 role = 'Client (Portal)';
-                content = text.split(/client:/i)[1].trim();
+                content = text.split(/client:/i)[1]?.trim() || text;
             }
             
             const isClient = role.includes('Client');
             const div = document.createElement('div');
             div.className = `flex ${isClient ? 'justify-start' : 'justify-end'}`;
             div.innerHTML = `
-                <div class="chat-bubble p-5 rounded-[1.5rem] text-sm leading-relaxed ${isClient ? 'bg-white border border-slate-200 text-slate-800' : 'bg-indigo-600 text-white shadow-md'}">
+                <div class="chat-bubble p-5 rounded-[1.5rem] text-sm leading-relaxed ${isClient ? 'bg-white border border-slate-200 text-slate-800 shadow-sm' : 'bg-indigo-600 text-white shadow-md'}">
                     <div class="text-[9px] uppercase font-black opacity-30 mb-2">${role}</div>
                     <div class="font-medium tracking-tight">${content}</div>
                 </div>
@@ -130,12 +130,11 @@
             chatFeed.appendChild(div);
             chatFeed.scrollTo({ top: chatFeed.scrollHeight, behavior: 'smooth' });
 
-            // Store in context history
             contextHistory.push(text);
-            if (contextHistory.length > 4) contextHistory.shift();
+            if (contextHistory.length > 5) contextHistory.shift();
         }
 
-        async function fetchWithRetry(url, payload, retries = 3, delay = 2000) {
+        async function fetchWithRetry(url, payload, retries = 5, delay = 2000) {
             for (let i = 0; i < retries; i++) {
                 try {
                     const response = await fetch(url, {
@@ -143,46 +142,46 @@
                         body: JSON.stringify(payload),
                         headers: { 'Content-Type': 'application/json' }
                     });
+                    
                     const data = await response.json();
-                    if (data.error) {
-                        if (data.error.message.includes('Quota exceeded') || response.status === 429) {
-                            log(`Quota limit. Waiting ${delay/1000}s...`);
+                    
+                    if (!response.ok || data.error) {
+                        const errorMsg = data.error?.message || response.statusText;
+                        if (errorMsg.includes('Quota exceeded') || response.status === 429) {
+                            log(`Quota limit. Pausing ${delay/1000}s...`, "error");
                             await new Promise(r => setTimeout(r, delay));
-                            delay *= 2;
+                            delay *= 2; 
                             continue;
                         }
-                        throw new Error(data.error.message);
+                        throw new Error(errorMsg);
                     }
                     return data;
                 } catch (err) {
                     if (i === retries - 1) throw err;
                     await new Promise(r => setTimeout(r, delay));
+                    delay *= 2;
                 }
             }
         }
 
         async function interpretAudio(base64Audio, apiKey) {
             const targetLang = document.getElementById('target-lang').value;
-            const model = "gemini-1.5-flash"; // Stable version for polling
+            const model = "gemini-1.5-flash"; 
             const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
             
-            const recentContext = contextHistory.length > 0 ? `PREVIOUS CONTEXT: ${contextHistory.join(' | ')}` : "No previous context.";
+            const contextStr = contextHistory.length > 0 ? `PREVIOUS: ${contextHistory.join(' | ')}` : "No context.";
 
             const payload = {
                 contents: [{
                     parts: [
-                        { text: `CONTEXT: You are transcribing a live professional call between an Agent and a Client. 
-                        ${recentContext}
-                        
-                        TASK: Listen to this new 8-second audio chunk. 
-                        1. Transcribe the Agent (local microphone) exactly.
-                        2. Transcribe the Client (portal audio) and translate to ${targetLang}.
-                        3. If there is only background noise or the audio is silent, output NOTHING.
-                        4. Do not hallucinate unrelated topics.
-                        
-                        OUTPUT FORMAT:
-                        Agent: [transcript]
-                        Client: [translation]` },
+                        { text: `CONTEXT: Professional call. ${contextStr}
+                        TASK: Transcribe this 12-second audio. 
+                        Agent: Microphone user. 
+                        Client: Browser audio (Translate to ${targetLang}).
+                        FORMAT:
+                        Agent: [text]
+                        Client: [text]
+                        If silent, return nothing.` },
                         { inlineData: { mimeType: "audio/webm", data: base64Audio } }
                     ]
                 }]
@@ -191,35 +190,36 @@
             visualizer.style.width = "100%";
             try {
                 const data = await fetchWithRetry(url, payload);
-                const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-                if (text && text.trim().length > 5) {
+                // Safety check for data.candidates
+                const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (text && text.trim().length > 3) {
                     text.split('\n').forEach(line => {
-                        if (line.trim()) appendMessage(line.trim());
+                        if (line.trim().length > 2) appendMessage(line.trim());
                     });
-                    log("Transcription anchored.", "success");
+                    log("Stream parsed.", "success");
                 } else {
-                    log("Audio processed (Silence/Noise).");
+                    log("Stream processed (Silence).");
                 }
             } catch (err) {
-                log("API Error: " + err.message, "error");
+                log("Processing Error: " + err.message, "error");
             } finally {
                 setTimeout(() => visualizer.style.width = "0%", 300);
             }
         }
 
         async function startSession(stream, apiKey) {
-            log("Engine live. Monitoring signal...");
+            log("Session started. Monitoring audio...");
             audioContext = new AudioContext();
             const source = audioContext.createMediaStreamSource(stream);
             analyser = audioContext.createAnalyser();
             analyser.fftSize = 64;
             source.connect(analyser);
 
-            mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+            mediaRecorder = new MediaRecorder(stream);
             isRecording = true;
 
             mediaRecorder.ondataavailable = async (e) => {
-                if (e.data.size > 3000) {
+                if (e.data.size > 2000) {
                     const reader = new FileReader();
                     reader.readAsDataURL(e.data);
                     reader.onloadend = () => {
@@ -235,7 +235,7 @@
                     mediaRecorder.stop();
                     mediaRecorder.start();
                 }
-            }, 8000); // 8-second chunks to respect 15-RPM quota
+            }, 12000); // 12-second interval to respect free-tier RPM limits
 
             statusDot.className = 'w-2 h-2 bg-green-500 shadow-md';
             statusText.innerText = 'Connected';
@@ -243,23 +243,24 @@
 
         startBtn.addEventListener('click', async () => {
             const apiKey = document.getElementById('api-key').value;
-            if (!apiKey) { alert("API Key Required"); return; }
+            if (!apiKey) { alert("Please provide a Gemini API Key."); return; }
             if (isRecording) { location.reload(); return; }
 
             try {
-                log("Connecting Audio Mixer...");
+                log("Requesting System Audio + Mic...");
                 const tabStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
                 const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                
                 const audioCtx = new AudioContext();
                 const dest = audioCtx.createMediaStreamDestination();
                 audioCtx.createMediaStreamSource(tabStream).connect(dest);
                 audioCtx.createMediaStreamSource(micStream).connect(dest);
                 
-                startBtn.innerText = "Active";
+                startBtn.innerText = "Active Session";
                 startBtn.classList.replace('bg-indigo-600', 'bg-red-500');
                 await startSession(dest.stream, apiKey);
             } catch (err) {
-                log("Capture Denied.", "error");
+                log("Permissions Denied.", "error");
             }
         });
     </script>
